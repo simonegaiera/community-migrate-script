@@ -1,6 +1,6 @@
-import subprocess
 import json
 from pymongo import MongoClient, errors
+from bson import json_util
 from dotenv import load_dotenv
 import os
 import sys
@@ -16,12 +16,9 @@ load_dotenv(dotenv_path)
 
 # Get variables from environment
 required_variables = [
-    'MONGO_USERNAME',
-    'MONGO_PASSWORD',
-    'MONGO_CLUSTER_URL',
+    'MONGO_URL',
     'MONGO_DATABASE_NAME',
     'MONGO_COLLECTION_NAME',
-    'SCRIPT_PATH',
     'JSON_FILE_PATH',
     'RESULT_FILE_PATH'
 ]
@@ -31,37 +28,27 @@ if missing_variables:
     print(f"Error: Missing required environment variables: {', '.join(missing_variables)}", file=sys.stderr)
     sys.exit(1)
 
-username = os.getenv('MONGO_USERNAME')
-password = os.getenv('MONGO_PASSWORD')
-cluster_url = os.getenv('MONGO_CLUSTER_URL')
+cluster_url = os.getenv('MONGO_URL')
 database_name = os.getenv('MONGO_DATABASE_NAME')
 collection_name = os.getenv('MONGO_COLLECTION_NAME')
-script_path = os.getenv('SCRIPT_PATH')
 json_file_path = os.getenv('JSON_FILE_PATH')
 result_file_path = os.getenv('RESULT_FILE_PATH')
 
-
-# Run the external script
-try:
-    subprocess.run(['python', script_path], check=True)
-except subprocess.CalledProcessError as e:
-    print(f"Error: Failed to run script {script_path}.", file=sys.stderr)
-    sys.exit(1)
-
-# Load JSON data from the file
+# Load JSON data from the file, parsing EJSON Extended JSON (so $numberLong → int/Int64)
 try:
     with open(json_file_path, 'r') as file:
-        data = json.load(file)
+        raw = file.read()
+        data = json_util.loads(raw)
 except FileNotFoundError:
     print(f"Error: JSON file not found at path {json_file_path}", file=sys.stderr)
     sys.exit(1)
-except json.JSONDecodeError:
-    print(f"Error: Failed to decode JSON from file {json_file_path}", file=sys.stderr)
+except (json.JSONDecodeError, ValueError) as e:
+    print(f"Error: Failed to decode JSON/EJSON from file {json_file_path}: {e}", file=sys.stderr)
     sys.exit(1)
 
 # Connect to MongoDB Atlas
 try:
-    client = MongoClient(f"mongodb+srv://{username}:{password}@{cluster_url}/?retryWrites=true&w=majority")
+    client = MongoClient(cluster_url)
     db = client.get_database(database_name)
 except errors.ConnectionFailure as e:
     print(f"Error: Failed to connect to MongoDB Atlas: {e}", file=sys.stderr)
@@ -90,8 +77,14 @@ except Exception as e:
 
 result = db[collection_name].aggregate([
     {
+        '$match': {
+            'db': {
+                '$exists': True
+            }
+        }
+    }, {
         '$group': {
-            '_id': '$filename', 
+            '_id': '$db', 
             'fsTotalSize': {
                 '$max': '$fsTotalSize'
             }, 

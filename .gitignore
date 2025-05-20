@@ -1,3 +1,6 @@
 .env
-recgwsetup/
+.venv
 parsed-data.json
+output.json
+output.txt
+result.csv
