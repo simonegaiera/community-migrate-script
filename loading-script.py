@@ -36,9 +36,14 @@ result_file_path = os.getenv('RESULT_FILE_PATH')
 
 # Load JSON data from the file, parsing EJSON Extended JSON (so $numberLong → int/Int64)
 try:
-    with open(json_file_path, 'r') as file:
-        raw = file.read()
-        data = json_util.loads(raw)
+    # first try UTF-8, if that fails fall back to UTF-16
+    try:
+        with open(json_file_path, 'r', encoding='utf-8') as file:
+            raw = file.read()
+    except UnicodeDecodeError:
+        with open(json_file_path, 'r', encoding='utf-16') as file:
+            raw = file.read()
+    data = json_util.loads(raw)
 except FileNotFoundError:
     print(f"Error: JSON file not found at path {json_file_path}", file=sys.stderr)
     sys.exit(1)
