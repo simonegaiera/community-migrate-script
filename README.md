@@ -1,27 +1,90 @@
 # MongoDB Community to Atlas Sizing Script
 
 ## Overview
-This script helps you size your MongoDB Community deployment for migration to MongoDB Atlas. Follow the steps below to execute the script and store the results.
+This tool collects storage and index sizing information from a MongoDB (or Amazon DocumentDB) cluster and produces a CSV report. It is intended to help size a migration to MongoDB Atlas.
 
-## Instructions
+The workflow is two steps:
+1. **`getMongoInfo.js`** — runs against the source cluster via `mongosh` and dumps stats to a JSON file.
+2. **`loading-script.py`** — loads that JSON file into an Atlas collection and writes a per-collection CSV report.
 
-### Step 1: Run the Script
-- Execute the `script.js` file to generate the necessary data. Connect to Compass and run:
+---
+
+## Requirements
+
+Install Python dependencies:
+```bash
+pip install -r requirements.txt
 ```
-mongosh mongodb+srv://<user>:<password>@<cluster>.mongodb.net --file getMongoInfo.js --norc --quiet > output.json
+
+---
+
+## Step 1: Collect stats from the source cluster
+
+### MongoDB / Atlas
+```bash
+mongosh "mongodb+srv://<user>:<password>@<cluster>.mongodb.net" \
+  --file getMongoInfo.js --norc --quiet > output.json
 ```
 
-### Step 2: Prepare Your Data
-- Create a folder and place all the exported `.json` files into it. Ensure that these files are correctly formatted for processing.
+### Amazon DocumentDB
+```bash
+mongosh <cluster-endpoint>:27017 \
+  --tls --tlsCAFile global-bundle.pem --retryWrites=false \
+  --username <user> --password <password> \
+  --file getMongoInfo.js --norc --quiet > output.json
+```
 
-### Step 3: Configure Environment Variables
-- Create an `.env` file in the same directory as your script. Modify the file to include the necessary configuration settings for your environment.
+The output file defaults to `output.json`. Use any filename you like — you will reference it in the next step.
 
-### Step 4: Parse the Data
-- Run the command `python load-script.py` to parse the data from the `.json` files and write it into your MongoDB instance.
+---
 
-### Step 5: Review the Results
-- The results of the parsing will be saved in a file named `result.txt`. Check this file for the output of the sizing analysis.
+## Step 2: Configure environment variables
 
-## Additional Notes
-- Ensure you have the required permissions and dependencies installed before running the scripts.
+Create a `.env` file in the project root with the following variables:
+
+```ini
+# Connection string for the Atlas cluster where stats will be loaded
+MONGO_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net
+
+# Atlas database and collection to store the raw stats
+MONGO_DATABASE_NAME=<database>
+MONGO_COLLECTION_NAME=<collection>
+
+# Path to the JSON file produced in Step 1
+JSON_FILE_PATH=output.json
+
+# Path where the CSV report will be written
+RESULT_FILE_PATH=result.csv
+```
+
+---
+
+## Step 3: Load and analyse
+
+```bash
+python loading-script.py
+```
+
+This will:
+1. Drop and recreate the target Atlas collection.
+2. Insert the raw stats from the JSON file.
+3. Run an aggregation that extracts per-collection metrics.
+4. Write the results to the CSV file defined in `RESULT_FILE_PATH`.
+
+---
+
+## Output
+
+The CSV report contains one row per collection with the following columns:
+
+| Column | Description |
+|---|---|
+| `namespace` | `database.collection` |
+| `count` | Number of documents |
+| `avgObjSize_bytes` | Average document size in bytes |
+| `dataSize_MB` | Uncompressed data size in MB |
+| `storageSize_MB` | Allocated disk size in MB |
+| `totalIndexSize_MB` | Total size of all indexes in MB |
+| `totalSize_MB` | `storageSize` + `totalIndexSize` in MB |
+| `nindexes` | Number of indexes |
+| `capped` | Whether the collection is capped |

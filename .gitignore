@@ -1,6 +1,7 @@
 .env
 .venv
 parsed-data.json
-output.json
-output.txt
+output*.json
+output*.txt
 result.csv
+doc-db/

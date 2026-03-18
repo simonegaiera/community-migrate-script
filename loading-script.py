@@ -83,43 +83,33 @@ except Exception as e:
 result = db[collection_name].aggregate([
     {
         '$match': {
-            'db': {
-                '$exists': True
-            }
+            'ns': {'$exists': True}   # collection-level documents have 'ns'; db-level ones don't
         }
-    }, {
-        '$group': {
-            '_id': '$db', 
-            'fsTotalSize': {
-                '$max': '$fsTotalSize'
-            }, 
-            'indexSize': {
-                '$sum': '$indexSize'
-            }
-        }
-    }, {
+    },
+    {
         '$project': {
-            '_id': 0, 
-            'project': '$_id', 
-            'fsTotalSize': {
-                '$round': [
-                    {
-                        '$divide': [
-                            '$fsTotalSize', 1024 * 1024 * 1024
-                        ]
-                    }, 3
-                ]
-            }, 
-            'indexSize': {
-                '$round': [
-                    {
-                        '$divide': [
-                            '$indexSize', 1024 * 1024 * 1024
-                        ]
-                    }, 3
-                ]
-            }
+            '_id': 0,
+            'namespace':        '$ns',
+            'count':            '$count',
+            'avgObjSize_bytes': '$avgObjSize',
+            'dataSize_MB': {
+                '$round': [{'$divide': ['$size', 1024 * 1024]}, 3]
+            },
+            'storageSize_MB': {
+                '$round': [{'$divide': ['$storageSize', 1024 * 1024]}, 3]
+            },
+            'totalIndexSize_MB': {
+                '$round': [{'$divide': ['$totalIndexSize', 1024 * 1024]}, 3]
+            },
+            'totalSize_MB': {
+                '$round': [{'$divide': ['$totalSize', 1024 * 1024]}, 3]
+            },
+            'nindexes': '$nindexes',
+            'capped':   '$capped'
         }
+    },
+    {
+        '$sort': {'namespace': 1}
     }
 ])
 

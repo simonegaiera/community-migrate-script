@@ -7,7 +7,7 @@ db.getMongo().getDBNames().forEach(function (d) {
   // get raw stats
   out.push( curr_db.stats() );
 
-  curr_db.getCollectionInfos({ type: "collection" }).forEach(function (info) {
+  curr_db.getCollectionInfos().filter(function (info) { return info.type === "collection"; }).forEach(function (info) {
     out.push( curr_db.getCollection(info.name).stats() );
   });
 });
